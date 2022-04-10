@@ -178,7 +178,7 @@ bool WebOSIntegration::hasCapability(QPlatformIntegration::Capability cap) const
     switch (cap) {
     case MultipleWindows:
     case NonFullScreenWindows:
-        return false;
+        return true;
     default: return QWaylandIntegration::hasCapability(cap);
     }
 }
