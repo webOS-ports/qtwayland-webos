@@ -89,6 +89,7 @@ public:
     static void state_changed(void *data, struct wl_webos_shell_surface *wl_webos_shell_surface, uint32_t state);
     static void close(void *data, struct wl_webos_shell_surface *wl_webos_shell_surface);
     static void position_changed(void *data, struct wl_webos_shell_surface *wl_webos_shell_surface, int32_t x, int32_t y);
+    static void client_size_changed(void *data, struct wl_webos_shell_surface *wl_webos_shell_surface, int32_t width, int32_t height);
     static void exposed(void *data, struct wl_webos_shell_surface *wl_webos_shell_surface, struct wl_array *rectangles);
     static void state_about_to_change(void *data, struct wl_webos_shell_surface *wl_webos_shell_surface, uint32_t state);
     static void addon_status_changed(void *data, struct wl_webos_shell_surface *wl_webos_shell_surface, uint32_t addon_status);

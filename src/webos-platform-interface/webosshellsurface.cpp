@@ -27,6 +27,7 @@
 const struct wl_webos_shell_surface_listener WebOSShellSurfacePrivate::listener = {
     WebOSShellSurfacePrivate::state_changed,
     WebOSShellSurfacePrivate::position_changed,
+    WebOSShellSurfacePrivate::client_size_changed,
     WebOSShellSurfacePrivate::close,
     WebOSShellSurfacePrivate::exposed,
     WebOSShellSurfacePrivate::state_about_to_change,
@@ -134,6 +135,14 @@ void WebOSShellSurfacePrivate::position_changed(void *data, struct wl_webos_shel
     WebOSShellSurfacePrivate* shell = static_cast<WebOSShellSurfacePrivate*>(data);
     shell->m_position = QPointF(x, y);
     shell->positionChanged();
+}
+
+void WebOSShellSurfacePrivate::client_size_changed(void *data, struct wl_webos_shell_surface *wl_webos_shell_surface, int32_t width, int32_t height)
+{
+    Q_UNUSED(wl_webos_shell_surface);
+    qDebug() << __PRETTY_FUNCTION__;
+    WebOSShellSurfacePrivate* shell = static_cast<WebOSShellSurfacePrivate*>(data);
+    shell->m_parent->resizeFromApplyConfigure(QSize(width,height));
 }
 
 
