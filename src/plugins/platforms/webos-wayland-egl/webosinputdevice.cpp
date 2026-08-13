@@ -439,7 +439,7 @@ void WebOSInputDevice::WebOSKeyboard::keyboard_key(uint32_t serial, uint32_t tim
     PMTRACE_FUNCTION;
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    auto *window = Keyboard::focusWindow();
+    auto *window = mFocus ? mFocus->waylandWindow() : nullptr;
     if (window && !window->window()->isActive()) {
         // Due to the asynchronous window activation by the upstream commit f497a5b,
         // the window may not yet be activated at the time when the very first key
@@ -583,7 +583,7 @@ void WebOSInputDevice::WebOSPointer::pointer_enter(uint32_t serial, struct wl_su
     QWaylandWindow *grab = QWaylandWindow::mouseGrab();
     if (!grab) {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-        QtWaylandClient::QWaylandPointerEvent enter(QEvent::Type::Enter, Qt::ScrollBegin, window,
+        QtWaylandClient::QWaylandPointerEvent enter(QEvent::Type::Enter, Qt::ScrollBegin, window->waylandSurface(),
                 parent->getTime(), mSurfacePos, mGlobalPos, mButtons, Qt::NoButton, parent->modifiers());
 #else
         QtWaylandClient::QWaylandPointerEvent enter(QtWaylandClient::QWaylandPointerEvent::Enter, parent->getTime(),
@@ -783,7 +783,8 @@ void WebOSInputDevice::WebOSTouch::touch_motion(uint32_t time, int32_t id, wl_fi
         return;
 #endif
 
-    Touch::touch_motion(time, id, x / mFocus->devicePixelRatio(), y / mFocus->devicePixelRatio());
+    Touch::touch_motion(time, id, x / mFocus->waylandWindow()->devicePixelRatio(),
+                    y / mFocus->waylandWindow()->devicePixelRatio());
 }
 
 void WebOSInputDevice::WebOSTouch::touch_cancel()

@@ -35,7 +35,7 @@ using QtWaylandClient::QWaylandNativeInterface;
 class WebOSIntegration : public QWaylandIntegration
 {
 public:
-    WebOSIntegration();
+    WebOSIntegration(const QString &platformName);
     ~WebOSIntegration();
 
     QPlatformWindow *createPlatformWindow(QWindow *window) const override;

@@ -142,7 +142,7 @@ void WebOSPlatformWindow::setVisible(bool visible)
         QWindowSystemInterface::flushWindowSystemEvents();
         if (!deleteGuard.isNull()) {
             // Delay hiding window if waiting for the frame callback (See WebOSPlatformWindow::doHandleFrameCallback())
-            if (!mWaitingForFrameCallback) {
+            if (!mFrameCallback) {
                 attach(0, 0, 0);
                 mSurface->commit();
             }
@@ -285,7 +285,9 @@ void WebOSPlatformWindow::restoreMouseCursor(QWaylandInputDevice *device)
 
 void WebOSPlatformWindow::onDevicePixelRatioChanged()
 {
-    updateSurface(false);
+    // Qt 6.10 made QWaylandWindow's scale handling private (updateScale() and
+    // setScale() are no longer reachable from a subclass) and drives it from
+    // its own screen-change path, so there is nothing to force here any more.
 }
 
 void WebOSPlatformWindow::onScreenChanged(QScreen *screen)
@@ -294,5 +296,6 @@ void WebOSPlatformWindow::onScreenChanged(QScreen *screen)
     if (waylandScreen())
         qInfo() << "Screen changed to output" << waylandScreen()->outputId() << waylandScreen()->name() << waylandScreen()->geometry();
     onOutputTransformChanged();
-    updateSurface(false);
+    // Scale is refreshed by QWaylandWindow itself since Qt 6.10; see
+    // onDevicePixelRatioChanged().
 }

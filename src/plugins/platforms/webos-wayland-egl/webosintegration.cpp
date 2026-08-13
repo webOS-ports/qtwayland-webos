@@ -33,9 +33,10 @@ static int s_dragDistance = 10;
 
 using QtWaylandClient::QWaylandClipboard;
 
-WebOSIntegration::WebOSIntegration()
+WebOSIntegration::WebOSIntegration(const QString &platformName)
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    : QWaylandIntegration()
+    // Qt 6.10 dropped the default constructor; the platform name is now required.
+    : QWaylandIntegration(platformName)
 #else
     : QWaylandIntegration(true)
 #endif
@@ -46,7 +47,7 @@ WebOSIntegration::WebOSIntegration()
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     mNativeInterface.reset(new WebOSNativeInterface(this));
     mDisplay.reset(new QWaylandDisplay(this));
-    mClipboard.reset(new QWaylandClipboard(mDisplay.data()));
+    mClipboard.reset(new QWaylandClipboard(mDisplay.get()));
 #endif
 }
 
@@ -87,7 +88,7 @@ QPlatformWindow *WebOSIntegration::createPlatformWindow(QWindow *window) const
         ::exit(1);
     }
 
-    return new WebOSPlatformWindow(window, mDisplay.data());
+    return new WebOSPlatformWindow(window, mDisplay.get());
 #else
     return new WebOSPlatformWindow(window);
 #endif

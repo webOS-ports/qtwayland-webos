@@ -52,8 +52,8 @@ class WebOSEglPlatformIntegration : public WebOSIntegration
 {
 public:
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    WebOSEglPlatformIntegration()
-        : WebOSIntegration()
+    WebOSEglPlatformIntegration(const QString &platformName)
+        : WebOSIntegration(platformName)
         , m_client_buffer_integration(new WebOSEglClientBufferIntegrationQt6())
     {
     }
