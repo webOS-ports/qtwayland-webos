@@ -20,6 +20,24 @@
 
 #include <cstdint>
 
+// QRect(x, y, w, h) stores the far edge as "x + w - 1", and evaluates it in
+// that order, so both the intermediate sum and the final edge have to fit in
+// an int - overflow in either aborts under Qt's checked-integer assertions
+// and silently wraps to garbage geometry otherwise. The compositor supplies
+// these values, so check before constructing rather than after.
+static inline bool fitsInInt32(int64_t v)
+{
+    return v >= INT32_MIN && v <= INT32_MAX;
+}
+
+static inline bool rectFitsInInt(int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    const int64_t rightSum = int64_t(x) + int64_t(w);
+    const int64_t bottomSum = int64_t(y) + int64_t(h);
+    return fitsInInt32(rightSum) && fitsInInt32(rightSum - 1)
+        && fitsInInt32(bottomSum) && fitsInInt32(bottomSum - 1);
+}
+
 QVector<QRect> parseWebOSExposedRects(const void *data, size_t byteSize)
 {
     // The event payload is "x,y,w,h, x,y,w,h, ..., -1". The size is in
@@ -31,8 +49,15 @@ QVector<QRect> parseWebOSExposedRects(const void *data, size_t byteSize)
     QVector<QRect> rects;
     for (; pos < end && *pos != -1; pos += 4) {
         if (end - pos >= 4) {
-            QRect r(*(pos + 0), *(pos + 1), *(pos + 2), *(pos + 3));
-            rects << r;
+            const int32_t x = *(pos + 0);
+            const int32_t y = *(pos + 1);
+            const int32_t w = *(pos + 2);
+            const int32_t h = *(pos + 3);
+            if (!rectFitsInInt(x, y, w, h)) {
+                qWarning() << "ignoring out-of-range expose rect" << x << y << w << h;
+                continue;
+            }
+            rects << QRect(x, y, w, h);
         } else {
             qWarning() << "missing data from expose rects";
             break;
