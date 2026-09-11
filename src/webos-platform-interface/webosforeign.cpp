@@ -54,10 +54,15 @@ WebOSExported* WebOSForeignPrivate::export_element(QWindow* window, WebOSForeign
     if (!qww)
         return NULL;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    struct ::wl_webos_exported* wlExported = QtWayland::wl_webos_foreign::export_element(qww->wlSurface(), exportedType);
+    struct ::wl_surface* wlsurface = qww->wlSurface();
 #else
-    struct ::wl_webos_exported* wlExported = QtWayland::wl_webos_foreign::export_element(qww->object(), exportedType);
+    struct ::wl_surface* wlsurface = qww->object();
 #endif
+    if (!wlsurface) {
+        qWarning() << "[Client:WebOSForeignPrivate] error: window has no wl_surface" << this;
+        return NULL;
+    }
+    struct ::wl_webos_exported* wlExported = QtWayland::wl_webos_foreign::export_element(wlsurface, exportedType);
     if (!wlExported)
         return NULL;
     WebOSExported* exported = new WebOSExported(window);
@@ -79,6 +84,8 @@ WebOSImported* WebOSForeignPrivate::import_element(const QString& windowId,
         return NULL;
 
     struct ::wl_webos_imported* wlImported = QtWayland::wl_webos_foreign::import_element(windowId, exportedType);
+    if (!wlImported)
+        return NULL;
     WebOSImported* imported = new WebOSImported(windowId, exportedType);
     WebOSImportedPrivate* imported_p = WebOSImportedPrivate::get(imported);
     imported_p->init(wlImported);
@@ -144,6 +151,8 @@ void WebOSExportedPrivate::setExportedWindow(const QRegion &sourceRegion, const 
     if (!wliface)
         return;
     wl_compositor *wlcompositor = static_cast<wl_compositor *>(wliface->nativeResourceForIntegration("compositor"));
+    if (!wlcompositor || !m_window)
+        return;
     qreal dpr = m_window->devicePixelRatio();
 
     wl_region* wl_source_region = wl_compositor_create_region(wlcompositor);
@@ -175,6 +184,8 @@ void WebOSExportedPrivate::setCropRegion(const QRegion &originalInputRegion, con
     if (!wliface)
         return;
     wl_compositor *wlcompositor = static_cast<wl_compositor *>(wliface->nativeResourceForIntegration("compositor"));
+    if (!wlcompositor || !m_window)
+        return;
     qreal dpr = m_window->devicePixelRatio();
 
     wl_region* wl_original_region = wl_compositor_create_region(wlcompositor);
@@ -303,21 +314,32 @@ WebOSImportedPrivate::~WebOSImportedPrivate()
 
 void WebOSImportedPrivate::requestPunchThrough(const QString& contextId)
 {
+    if (!isInitialized())
+        return;
     attach_punchthrough_with_context(contextId);
 }
 
 void WebOSImportedPrivate::setPunchThrough(const QString& contextId)
 {
+    if (!isInitialized())
+        return;
     set_punchthrough(contextId);
 }
 
 void WebOSImportedPrivate::attachSurface(QWaylandWindow* surface)
 {
+    if (!isInitialized())
+        return;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    attach_surface(surface->wlSurface());
+    struct ::wl_surface* ws = surface->wlSurface();
 #else
-    attach_surface(surface->object());
+    struct ::wl_surface* ws = surface->object();
 #endif
+    if (!ws) {
+        qWarning("WebOSImported::attachSurface: window has no wl_surface");
+        return;
+    }
+    attach_surface(ws);
 }
 
 void WebOSImportedPrivate::destroy()

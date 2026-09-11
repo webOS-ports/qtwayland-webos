@@ -105,14 +105,21 @@ QWaylandShellSurface* WebOSShellPrivate::createShellSurface(QWaylandWindow* wayl
     }
 #endif
 
-    if (m_wlShell) {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-        struct wl_webos_shell_surface* webos_shell_surface = wl_webos_shell_get_shell_surface(m_shell, waylandWindow->wlSurface());
-        struct wl_shell_surface *shell_surface = m_wlShell->get_shell_surface(waylandWindow->wlSurface());
+    struct ::wl_surface *wlsurface = waylandWindow->wlSurface();
 #else
-        struct wl_webos_shell_surface* webos_shell_surface = wl_webos_shell_get_shell_surface(m_shell, waylandWindow->object());
-        struct wl_shell_surface *shell_surface = m_wlShell->get_shell_surface(waylandWindow->object());
+    struct ::wl_surface *wlsurface = waylandWindow->object();
 #endif
+    // Null before the window is shown and after it is hidden; both
+    // get_shell_surface requests take a non-nullable argument.
+    if (!wlsurface) {
+        qCritical() << "Cannot create webos_shell_surface: window has no wl_surface";
+        return 0;
+    }
+
+    if (m_wlShell) {
+        struct wl_webos_shell_surface* webos_shell_surface = wl_webos_shell_get_shell_surface(m_shell, wlsurface);
+        struct wl_shell_surface *shell_surface = m_wlShell->get_shell_surface(wlsurface);
         if (webos_shell_surface && shell_surface) {
             WebOSShellSurface* wss = new WebOSShellSurface(webos_shell_surface, shell_surface, waylandWindow);
             emit q->shellSurfaceCreated(wss, waylandWindow);
