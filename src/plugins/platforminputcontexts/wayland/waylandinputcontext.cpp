@@ -178,7 +178,10 @@ void WaylandInputContext::commit()
     QInputMethodEvent event;
     event.setCommitString(m_preEditData.preEdit);
     resetPreEditData();
-    QGuiApplication::sendEvent(m_focusObject, &event);
+    // The focus object can already be destroyed while the model is still
+    // active; focusObjectDestroyed() only nulls the pointer.
+    if (m_focusObject)
+        QGuiApplication::sendEvent(m_focusObject, &event);
     text_model_commit(m_currentTextModel);
     text_model_reset(m_currentTextModel, serial);
 }
@@ -246,7 +249,7 @@ void WaylandInputContext::commitAndReset(bool keepCursorPosition)
 #ifdef WAYLAND_INPUT_CONTEXT_DEBUG
     qDebug() << __PRETTY_FUNCTION__ << inPreEdit << keepCursorPosition;
 #endif
-    if (inPreEdit && inputMethodAccepted()) {
+    if (inPreEdit && inputMethodAccepted() && m_focusObject) {
         QList<QInputMethodEvent::Attribute> attrs;
         if (keepCursorPosition) {
             // Set attribute to move the cursor back to the original position
@@ -258,8 +261,10 @@ void WaylandInputContext::commitAndReset(bool keepCursorPosition)
         QInputMethodEvent event(QString(""), attrs);
         event.setCommitString(m_preEditData.preEdit);
 
-        // Commit the preedit data
-        QGuiApplication::sendEvent(m_focusObject, &event);
+        // Commit the preedit data. The query above runs application code
+        // that may destroy the focus object, so re-check it.
+        if (m_focusObject)
+            QGuiApplication::sendEvent(m_focusObject, &event);
 
         // Reset
         resetPreEditData();
@@ -583,6 +588,11 @@ void WaylandInputContext::textModelDeleteSurroundingText(void *data, struct text
     qDebug() << __PRETTY_FUNCTION__ << index << length;
 #endif
     WaylandInputContext* that = static_cast<WaylandInputContext*>(data);
+    // The focus object may be gone while the compositor still sends events
+    // for the active model; sendEvent(nullptr, ...) would crash.
+    if (!that->m_focusObject)
+        return;
+
     QList<QInputMethodEvent::Attribute> attributes;
     QInputMethodEvent *event = new QInputMethodEvent(QString(""), attributes);
 
