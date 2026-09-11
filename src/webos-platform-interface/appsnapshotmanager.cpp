@@ -36,15 +36,16 @@ static char** dup_commmand_line_argv(const int argc, char** argv)
     Q_ASSERT(argc>0);
     Q_ASSERT(argv);
 
-    char** dup_argv = new char*[int2ulong(argc)];
-    Q_ASSERT(dup_argv);
+    // Zero-initialized: free_command_line_arguments()/to_qstring() test every
+    // slot for null, and a hole left uninitialized (source argv[i] == NULL)
+    // would leave garbage there instead.
+    char** dup_argv = new char*[int2ulong(argc)]();
 
     for (int i = 0; i < argc; ++i) {
         if (!argv[i])
             continue;
 
         dup_argv[i] = new char[strlen(argv[i])+1];
-        Q_ASSERT(dup_argv[i]);
 
         strcpy(dup_argv[i], argv[i]);
     }
@@ -102,7 +103,9 @@ static int pre_dump(void* data)
 
         int err = setsid();
         if (err < 0) {
-            qWarning() << "failure to setsid() function : error=" << strerror(err);
+            // setsid() returns -1 on failure and sets errno; the return
+            // value itself is not an errno to pass to strerror().
+            qWarning() << "failure to setsid() function : error=" << strerror(errno);
             rv = false;
         }
         close(fd);
@@ -258,13 +261,17 @@ bool AppSnapshotManagerPrivate::dump()
                        << "reason=" << m_failureReason;
         m_state = state;
         m_failureReason = std::move(failureReason);
-        m_window->setScreen(NULL);
+        // The application may have destroyed the window between
+        // initialize() and this dump/restore point.
+        if (m_window)
+            m_window->setScreen(NULL);
 
         return false;
     }
     Q_ASSERT(q->isPostDumped() || q->isRestored());
 
-    m_window->setScreen(NULL);
+    if (m_window)
+        m_window->setScreen(NULL);
     if (m_cmdlineArgsChangedPending) {
         emit q->commandLineArgumentsChanged(m_argc, m_argv);
         m_cmdlineArgsChangedPending = false;
