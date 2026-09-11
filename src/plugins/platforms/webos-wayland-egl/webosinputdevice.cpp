@@ -74,14 +74,21 @@ QWaylandInputDevice::Touch *WebOSInputDevice::createTouch(QWaylandInputDevice *d
 void WebOSInputDevice::seat_capabilities(uint32_t caps)
 {
     PMTRACE_FUNCTION;
-    if (caps & WL_SEAT_CAPABILITY_TOUCH && !mTouch) {
+    // mTouch (the protocol object) is reset by the base class whenever the
+    // touch capability is removed, but mTouchDevice - the QPointingDevice -
+    // is meant to survive a remove/re-add cycle exactly like upstream does
+    // (qwaylandinputdevice.cpp guards the same allocation with
+    // "if (!mTouchDevice)"). Guarding only on !mTouch here allocated a new
+    // device on every re-add, leaking the previous one and leaving
+    // mTouchRegistered stale so the replacement was never registered.
+    if (caps & WL_SEAT_CAPABILITY_TOUCH && !mTouch && !mTouchDevice) {
         // This substitues creation of QTouchDevice in QtWayland
         // Then, we will register it when real event comes up
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         // Create new pointing device (name, id, type, pointerType, maxPoints, uniquieId)
         mTouchDevice = new QPointingDevice(QLatin1String("some touchscreen"), 0
                 , QInputDevice::DeviceType::TouchScreen, QPointingDevice::PointerType::Finger
-                , QInputDevice::Capability::Position, 10, 0);
+                , QInputDevice::Capability::Position, 10, 0, QString(), QPointingDeviceUniqueId(), this);
 #else
         mTouchDevice = new QTouchDevice;
         mTouchDevice->setType(QTouchDevice::TouchScreen);
@@ -128,6 +135,19 @@ WebOSInputDevice::WebOSKeyboard::WebOSKeyboard(QWaylandInputDevice *device)
 #endif
 {
 
+}
+
+WebOSInputDevice::WebOSKeyboard::~WebOSKeyboard()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#if QT_CONFIG(xkbcommon)
+    // A keymap event that arrived but was never consumed by loadKeyMap()
+    // (no key/modifiers event followed before the keyboard capability was
+    // dropped) would otherwise leak the fd.
+    if (mPendingKeymap)
+        close(mKeymapFd);
+#endif
+#endif
 }
 
 #if QT_CONFIG(xkbcommon)
@@ -482,8 +502,14 @@ void WebOSInputDevice::WebOSKeyboard::keyboard_keymap(uint32_t format, int32_t f
         return;
     }
 
+    // A second keymap event before loadKeyMap() consumed the first would
+    // otherwise overwrite mKeymapFd and leak that fd.
+    if (mPendingKeymap)
+        close(mKeymapFd);
+
     mKeymapFd = fd;
     mKeymapSize = size;
+    mKeymapFormat = format;
     mPendingKeymap = true;
 #else
     Keyboard::keyboard_keymap(format, fd, size);
@@ -572,10 +598,14 @@ void WebOSInputDevice::WebOSPointer::pointer_enter(uint32_t serial, struct wl_su
     if (focusChanged) {
         WebOSPlatformWindow *ww = static_cast<WebOSPlatformWindow *>(window);
         m_origin = ww->position();
-        connect(ww, &WebOSPlatformWindow::resizeRequested, parent, [this] {
+        // Context object must be this Pointer, not the longer-lived seat:
+        // if the compositor drops the pointer capability, QWaylandInputDevice
+        // resets mPointer while the window and seat both survive, and a
+        // lambda kept alive by the seat would then fire into freed memory.
+        connect(ww, &WebOSPlatformWindow::resizeRequested, this, [this] {
             this->pauseEvents();
         });
-        connect(ww, &WebOSPlatformWindow::positionChanged, parent, [this](const QPointF &position) {
+        connect(ww, &WebOSPlatformWindow::positionChanged, this, [this](const QPointF &position) {
             this->flushPausedEvents(position);
         });
     }
@@ -597,13 +627,15 @@ void WebOSInputDevice::WebOSPointer::pointer_leave(uint32_t time, struct wl_surf
 {
     PMTRACE_FUNCTION;
 
-    if (!surface)
-        return;
-
-    WebOSInputDevice *parent = static_cast<WebOSInputDevice*>(mParent);
-    WebOSPlatformWindow *ww = static_cast<WebOSPlatformWindow *>(QWaylandWindow::fromWlSurface(surface));
-    if (ww)
-        ww->disconnect(parent);
+    // A null surface means the window was destroyed; Pointer::pointer_leave
+    // still needs to run its focus/button cleanup for that case, so do not
+    // return before it - only the window-specific disconnect below is
+    // skipped when there is no surface to look the window up from.
+    if (surface) {
+        WebOSPlatformWindow *ww = static_cast<WebOSPlatformWindow *>(QWaylandWindow::fromWlSurface(surface));
+        if (ww)
+            ww->disconnect(this);
+    }
 
     if (Q_UNLIKELY(m_paused))
         flushPausedEvents();
