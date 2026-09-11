@@ -201,7 +201,9 @@ void WebOSPlatformWindow::onShellSurfaceCreated(WebOSShellSurface *shellSurface,
     if (shellSurface && window == this) {
         m_shellSurface = shellSurface;
         qInfo() << "shellSurface" << m_shellSurface << "was created for" << static_cast<QObject*>(this) << window;
-        QObject::connect(m_shellSurface, &WebOSShellSurface::positionChanged, [this] {
+        QObject::connect(m_shellSurface.data(), &WebOSShellSurface::positionChanged, this, [this] {
+            if (!m_shellSurface)
+                return;
             m_position = m_shellSurface->position();
             setGeometry(QRect(m_position.x(), m_position.y(), geometry().width(), geometry().height()));
             emit positionChanged(m_position);

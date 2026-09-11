@@ -49,7 +49,11 @@ WebOSNativeInterface::nativeResourceForScreen(const QByteArray &resourceString, 
 {
     QByteArray lowerCaseResource = resourceString.toLower();
 
-    if (lowerCaseResource == "display")
+    // A placeholder QPlatformScreen (used while no real output is available
+    // yet) is not a QWaylandScreen; the cast would be invalid. Upstream
+    // guards its own screen casts the same way (nativeResourceForScreen's
+    // "output" case).
+    if (lowerCaseResource == "display" && screen->handle() && !screen->handle()->isPlaceholder())
         return static_cast<QWaylandScreen *>(screen->handle())->display()->wl_display();
 
     return QWaylandNativeInterface::nativeResourceForScreen(resourceString, screen);

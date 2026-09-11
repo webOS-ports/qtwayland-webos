@@ -18,6 +18,7 @@
 #define WEBOSWINDOW_H
 
 #include <QtCore/qglobal.h>
+#include <QtCore/QPointer>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QtWaylandEglClientHwIntegration/private/qwaylandeglwindow_p.h>
 #else
@@ -92,7 +93,11 @@ private slots:
     void onScreenChanged(QScreen *screen);
 
 private:
-    WebOSShellSurface *m_shellSurface = nullptr;
+    // resetSurfaceRole() (QWindow::setFlags/setParent toggling a role) can
+    // delete the underlying WebOSShellSurfacePrivate - and with it the
+    // public WebOSShellSurface - out from under this window without any
+    // notification here, so a raw pointer would dangle.
+    QPointer<WebOSShellSurface> m_shellSurface;
 
     bool m_autoOrientation;
     QRect m_initialGeometry;
