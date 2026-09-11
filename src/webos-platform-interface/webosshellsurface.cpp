@@ -16,6 +16,7 @@
 
 #include "webosshellsurface.h"
 #include "webosshellsurface_p.h"
+#include "webosexposedrectparser.h"
 
 #include <QtWaylandClient/private/qwaylandwindow_p.h>
 
@@ -151,22 +152,7 @@ void WebOSShellSurfacePrivate::exposed(void *data, struct wl_webos_shell_surface
     Q_UNUSED(wl_webos_shell_surface);
     WebOSShellSurfacePrivate* shell = static_cast<WebOSShellSurfacePrivate*>(data);
 
-    // The event payload is "x,y,w,h, x,y,w,h, ..., -1". wl_array::size is in
-    // bytes; keep all arithmetic in elements so a payload without the -1
-    // sentinel (or a truncated one) cannot send the loop past the array.
-    const int32_t* pos = static_cast<const int32_t*>(rectangles->data);
-    const int32_t* const end = pos + rectangles->size / sizeof(int32_t);
-
-    QVector<QRect> rects;
-    for (; pos < end && *pos != -1; pos += 4) {
-        if (end - pos >= 4) {
-            QRect r(*(pos + 0), *(pos + 1), *(pos + 2), *(pos + 3));
-            rects << r;
-        } else {
-            qWarning() << "missing data from expose rects";
-            break;
-        }
-    }
+    QVector<QRect> rects = parseWebOSExposedRects(rectangles->data, rectangles->size);
 
     QRegion exposeRegion;
     exposeRegion.setRects(rects.data(), rects.size());

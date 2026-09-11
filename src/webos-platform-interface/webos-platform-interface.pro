@@ -38,6 +38,7 @@ SOURCES += \
     webosplatform.cpp \
     webosshell.cpp \
     webosshellsurface.cpp \
+    webosexposedrectparser.cpp \
     webossurfacegroupcompositor.cpp \
     webossurfacegroup.cpp \
     webossurfacegrouplayer.cpp \
@@ -68,6 +69,7 @@ HEADERS += \
     webosplatform_p.h \
     webosshell_p.h \
     webosshellsurface_p.h \
+    webosexposedrectparser.h \
     webossurfacegroupcompositor_p.h \
     webossurfacegroup_p.h \
     webossurfacegrouplayer_p.h \
