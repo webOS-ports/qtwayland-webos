@@ -385,7 +385,11 @@ void WaylandInputContext::showInputPanel()
 #ifdef WAYLAND_INPUT_CONTEXT_DEBUG
     qDebug() << "currentTextModel" << m_currentTextModel << "accepted " << inputMethodAccepted();
 #endif
-    if (!m_seat || !inputMethodAccepted())
+    // QInputMethod::show() calls in here directly, so the factory is not
+    // guaranteed to be bound yet (non-webOS compositor, or the registry
+    // events simply have not been dispatched); creating a text model
+    // through a null proxy would crash in libwayland.
+    if (!m_seat || !m_textModelFactory || !inputMethodAccepted())
         return;
 
     if (m_isCleanupPending)
