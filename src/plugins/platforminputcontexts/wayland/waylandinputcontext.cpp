@@ -119,7 +119,7 @@ static QTextCharFormat qtStylingFrom(uint32_t style)
     return format;
 }
 
-static int serial = 0;
+static uint32_t serial = 0;
 
 WaylandInputContext::WaylandInputContext()
     : m_focusObject(0)
@@ -145,6 +145,12 @@ WaylandInputContext::~WaylandInputContext()
 {
     cleanup();
 
+    if (m_textModelFactory) {
+        text_model_factory_destroy(m_textModelFactory);
+    }
+    if (m_seat) {
+        wl_seat_destroy(m_seat);
+    }
     if (m_registry) {
         wl_registry_destroy(m_registry);
     }
@@ -198,7 +204,6 @@ void WaylandInputContext::update(Qt::InputMethodQueries queries)
 
     m_pendingQueries |= queries;
     if (!m_modelActivated) {
-        m_pendingQueries |= queries;
         m_isQueryPending = true;
         return;
     }
@@ -535,9 +540,11 @@ void WaylandInputContext::registryGlobalAdded(void *data,
     // For convenience...
     QByteArray interfaceName(interface);
     WaylandInputContext* that = static_cast<WaylandInputContext*>(data);
-    if (interfaceName == "text_model_factory") {
+    // Bind each global once; rebinding on a duplicate announcement would
+    // leak the proxy the text model was created against.
+    if (interfaceName == "text_model_factory" && !that->m_textModelFactory) {
         that->m_textModelFactory = static_cast<text_model_factory *>(wl_registry_bind(that->m_registry, id, &text_model_factory_interface, 1));
-    } else if (interfaceName == "wl_seat") {
+    } else if (interfaceName == "wl_seat" && !that->m_seat) {
         that->m_seat = static_cast<wl_seat*>(wl_registry_bind(that->m_registry, id, &wl_seat_interface, 1));
     }
 }
@@ -580,7 +587,11 @@ void WaylandInputContext::textModelPreEditString(void *data, struct text_model *
     that->m_preEditData.preEdit = QString(text);
     that->m_preEditData.formats << QInputMethodEvent::Attribute(QInputMethodEvent::Cursor, that->m_preEditData.preEdit.length(), 1, QVariant());
     QInputMethodEvent *event = new QInputMethodEvent(that->m_preEditData.preEdit, that->m_preEditData.formats);
-//    resetPreEditData();
+    // Styling and cursor attributes only apply to this preedit string; the
+    // compositor sends fresh ones (preedit_styling/preedit_cursor) before the
+    // next preedit_string. Without this the list grew by at least one Cursor
+    // attribute per event and re-sent stale styling ranges every update.
+    that->m_preEditData.formats.clear();
     QCoreApplication::postEvent(that->m_focusObject, event);
 }
 
