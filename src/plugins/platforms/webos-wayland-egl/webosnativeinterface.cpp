@@ -20,7 +20,10 @@
 #include <QtWaylandClient/private/qwaylandscreen_p.h>
 #include <QtWaylandClient/private/qwaylandintegration_p.h>
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+#include <QtWaylandClient/private/qwaylandglcontext_p.h>
+#include <QtWaylandClient/private/qwaylandeglclientbufferintegration_p.h>
+#elif QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QtWaylandEglClientHwIntegration/private/qwaylandglcontext_p.h>
 #include <QtWaylandEglClientHwIntegration/private/qwaylandeglclientbufferintegration_p.h>
 #else

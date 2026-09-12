@@ -19,7 +19,13 @@
 
 #include <QtCore/qglobal.h>
 #include <QtCore/QPointer>
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+// Qt 6.10 moved the QtWayland client into qtbase and stopped publishing the
+// client EGL hardware integration as its own module; its private headers are
+// installed alongside the QtWaylandClient ones instead. The implementation
+// comes from the wayland-egl client buffer plugin, which exports these types.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+#include <QtWaylandClient/private/qwaylandeglwindow_p.h>
+#elif QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QtWaylandEglClientHwIntegration/private/qwaylandeglwindow_p.h>
 #else
 #include "qwaylandeglwindow.h"

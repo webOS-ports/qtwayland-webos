@@ -19,7 +19,9 @@
 
 #include "webosintegration_p.h"
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+#include <QtWaylandClient/private/qwaylandeglclientbufferintegration_p.h>
+#elif QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QtWaylandEglClientHwIntegration/private/qwaylandeglclientbufferintegration_p.h>
 #else
 #include "qwaylandeglclientbufferintegration.h"
