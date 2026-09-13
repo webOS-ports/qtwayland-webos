@@ -50,7 +50,12 @@ versionAtLeast(QT_VERSION, 6.10.0) {
     # location: both sit under ${libdir}/plugins/.
     WAYLAND_EGL_CLIENT_PLUGIN_DIR = $$[QT_INSTALL_PLUGINS]/wayland-graphics-integration-client
     LIBS += -L$$WAYLAND_EGL_CLIENT_PLUGIN_DIR -l:libqt-plugin-wayland-egl.so
-    QMAKE_RPATHDIR += \$\$ORIGIN/../wayland-graphics-integration-client
+    # QMAKE_RPATHDIR mangles this: qmake emits \$$$ORIGIN, make turns $$ into
+    # $ and then eats $O as an (empty) variable, so the linker records
+    # $RIGIN and the loader never finds the plugin. Write the flag out
+    # directly instead: \\$\$ORIGIN reaches the Makefile as \$$ORIGIN, make
+    # emits \$ORIGIN, and the shell hands the linker a literal $ORIGIN.
+    QMAKE_LFLAGS += -Wl,-rpath,\\$\$ORIGIN/../wayland-graphics-integration-client
 }
 
 qtConfig(xkbcommon) {
