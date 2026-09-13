@@ -19,6 +19,7 @@
 
 #include "appsnapshotmanager.h"
 
+#include <QPointer>
 #include <QString>
 #include <QtCore/private/qobject_p.h>
 
@@ -52,7 +53,9 @@ public:
     QString m_failureReason;
     QString m_workingPath;
     QString m_appId;
-    QWindow* m_window;
+    // Tracked, not owned: the application may destroy the window between
+    // initialize() and dump().
+    QPointer<QWindow> m_window;
     int m_argc;
     char** m_argv;
     bool m_cmdlineArgsChangedPending;

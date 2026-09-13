@@ -35,7 +35,12 @@ WebOSXInputExtension::WebOSXInputExtension()
     if (nativeInterface) {
         m_display = static_cast<wl_display*>(nativeInterface->nativeResourceForIntegration("display"));
     }
-    Q_ASSERT(m_display);
+    // In a release build the Q_ASSERT this used to be compiles away and
+    // wl_display_get_registry(nullptr) crashes on a non-wayland QPA.
+    if (!m_display) {
+        qWarning("WebOSXInputExtension: no wayland display available");
+        return;
+    }
 
     m_registry = wl_display_get_registry(m_display);
     wl_registry_add_listener(m_registry, &registryListener, this);
@@ -43,6 +48,12 @@ WebOSXInputExtension::WebOSXInputExtension()
 
 WebOSXInputExtension::~WebOSXInputExtension()
 {
+    // The registry listener's user data is this object; leaving the proxies
+    // alive would dispatch future events into freed memory.
+    if (m_extension)
+        wl_webos_xinput_extension_destroy(m_extension);
+    if (m_registry)
+        wl_registry_destroy(m_registry);
 }
 
 void WebOSXInputExtension::registryGlobalAdded(void *data, struct wl_registry *registry, uint32_t id, const char *interface, uint32_t version)
@@ -53,7 +64,7 @@ void WebOSXInputExtension::registryGlobalAdded(void *data, struct wl_registry *r
 
     QByteArray interfaceName(interface);
     WebOSXInputExtension* that = static_cast<WebOSXInputExtension*>(data);
-    if (interfaceName == "wl_webos_xinput_extension") {
+    if (interfaceName == "wl_webos_xinput_extension" && !that->m_extension) {
         that->m_extension = static_cast<wl_webos_xinput_extension*>(wl_registry_bind(that->m_registry, id, &wl_webos_xinput_extension_interface, 1));
         emit that->interfaceReady();
     }
@@ -68,7 +79,10 @@ void WebOSXInputExtension::registryGlobalRemoved(void *data, wl_registry *regist
 
 wl_webos_xinput* WebOSXInputExtension::registerInput()
 {
-    Q_ASSERT(m_extension);
+    if (!m_extension) {
+        qWarning("WebOSXInputExtension: register_input without a bound extension");
+        return nullptr;
+    }
     return wl_webos_xinput_extension_register_input(m_extension);
 }
 
@@ -88,6 +102,12 @@ WebOSXInput::WebOSXInput()
 
 WebOSXInput::~WebOSXInput()
 {
+    // The input listener's user data is this object; destroy the proxy so a
+    // late activation_request cannot land in freed memory. m_extension has
+    // no QObject parent, so it must be deleted here as well.
+    if (m_input)
+        wl_webos_xinput_destroy(m_input);
+    delete m_extension;
 }
 
 bool WebOSXInput::activate(const QString& type)
@@ -140,6 +160,8 @@ void WebOSXInput::deactivationRequest(void *data, struct wl_webos_xinput *wl_web
 void WebOSXInput::doRegister()
 {
     m_input = m_extension->registerInput();
+    if (!m_input)
+        return;
     wl_webos_xinput_add_listener(m_input, &m_inputListener, this);
 
     emit registered();

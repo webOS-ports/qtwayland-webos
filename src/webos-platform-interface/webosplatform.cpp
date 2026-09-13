@@ -44,7 +44,11 @@ WebOSPlatformPrivate::WebOSPlatformPrivate()
     //RISK : if uderlying QPA is not qtwayland, this will cause problem.
     //Currently no good way is found to validate QPA.
     //QGuiApplication::platformName() was tried, but it returned Null QString.
-    m_display = static_cast<QWaylandIntegration *>(QGuiApplicationPrivate::platformIntegration())->display();
+    QPlatformIntegration *integration = QGuiApplicationPrivate::platformIntegration();
+    if (integration)
+        m_display = static_cast<QWaylandIntegration *>(integration)->display();
+    else
+        qWarning("WebOSPlatform created before the platform integration; no wayland display");
     if (m_display)
         m_display->addRegistryListener(WebOSPlatformPrivate::registry_global, this);
 }
@@ -169,8 +173,9 @@ AppSnapshotManager* WebOSPlatform::appSnapshotManager()
         d->m_appSnapshotManager =
             static_cast<AppSnapshotManager*>(QGuiApplication::platformNativeInterface()->nativeResourceForIntegration(QByteArrayLiteral("appsnapshotmanager")));
 
-        QObject::connect(d->m_appSnapshotManager, SIGNAL(stateChanged(const AppSnapshotManager::AppSnapShotState, const QString)),
-                         this, SLOT(onStateChanged(const AppSnapshotManager::AppSnapShotState, const QString)));
+        if (d->m_appSnapshotManager)
+            QObject::connect(d->m_appSnapshotManager, SIGNAL(stateChanged(const AppSnapshotManager::AppSnapShotState, const QString)),
+                             this, SLOT(onStateChanged(const AppSnapshotManager::AppSnapShotState, const QString)));
     }
     return d->m_appSnapshotManager;
 }
@@ -182,7 +187,9 @@ void WebOSPlatform::onStateChanged(const AppSnapshotManager::AppSnapShotState st
     switch (state) {
         case AppSnapshotManager::Ready:
             delete d->m_groupCompositor;
+            d->m_groupCompositor = nullptr;
             delete d->m_inputManager;
+            d->m_inputManager = nullptr;
             break;
         case AppSnapshotManager::PostDumped:
         case AppSnapshotManager::Restored:

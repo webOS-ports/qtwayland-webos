@@ -55,7 +55,8 @@ public:
     QWaylandShellSurface* createShellSurface(QWaylandWindow* waylandWindow);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QWaylandShellSurface* preCreateShellSurface(QWaylandWindow* waylandWindow);
-    void setWlShell(QtWayland::wl_shell *wlShell) { m_wlShell = wlShell; }
+    // A re-announced wl_shell global would otherwise leak the previous wrapper.
+    void setWlShell(QtWayland::wl_shell *wlShell) { delete m_wlShell; m_wlShell = wlShell; }
 
     static void registry_global(void *data, struct wl_registry *registry, uint32_t id, const QString &interface, uint32_t version);
 #endif

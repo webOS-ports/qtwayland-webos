@@ -48,6 +48,7 @@ class WebOSPresentationFeedbackPrivate : public QObject, public QtWayland::wp_pr
     Q_OBJECT
 public:
     explicit WebOSPresentationFeedbackPrivate(struct ::wp_presentation_feedback *object);
+    ~WebOSPresentationFeedbackPrivate();
 
 signals:
     void syncOutput(QtWaylandClient::QWaylandScreen *screen);

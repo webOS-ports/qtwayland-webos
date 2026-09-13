@@ -19,7 +19,9 @@
 
 #include "webosintegration_p.h"
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+#include <QtWaylandClient/private/qwaylandeglclientbufferintegration_p.h>
+#elif QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QtWaylandEglClientHwIntegration/private/qwaylandeglclientbufferintegration_p.h>
 #else
 #include "qwaylandeglclientbufferintegration.h"
@@ -52,8 +54,8 @@ class WebOSEglPlatformIntegration : public WebOSIntegration
 {
 public:
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    WebOSEglPlatformIntegration()
-        : WebOSIntegration()
+    WebOSEglPlatformIntegration(const QString &platformName)
+        : WebOSIntegration(platformName)
         , m_client_buffer_integration(new WebOSEglClientBufferIntegrationQt6())
     {
     }

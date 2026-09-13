@@ -31,8 +31,7 @@ public:
 QPlatformIntegration *WebOSIntegrationPlugin::create(const QString& system, const QStringList& paramList)
 {
     Q_UNUSED(paramList);
-    Q_UNUSED(system);
-    auto *integration = new WebOSEglPlatformIntegration();
+    auto *integration = new WebOSEglPlatformIntegration(system);
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 1)
     if (!integration->init()) {

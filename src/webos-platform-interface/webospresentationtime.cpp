@@ -23,9 +23,19 @@
 
 #include "securecoding.h"
 
+#include <limits>
+
 WebOSPresentationFeedbackPrivate::WebOSPresentationFeedbackPrivate(struct ::wp_presentation_feedback *object)
 : wp_presentation_feedback(object)
 {
+}
+
+WebOSPresentationFeedbackPrivate::~WebOSPresentationFeedbackPrivate()
+{
+    // The generated qtwaylandscanner destructor leaves the wl proxy alive;
+    // without this every frame's feedback object leaked one proxy.
+    if (object())
+        wp_presentation_feedback_destroy(object());
 }
 
 void WebOSPresentationFeedbackPrivate::wp_presentation_feedback_sync_output(struct ::wl_output *output)
@@ -65,31 +75,44 @@ void WebOSPresentationTime::requestFeedback(QWaylandWindow *window)
     Q_D(WebOSPresentationTime);
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    auto *surface = window->wlSurface();
+    auto *surface = window ? window->wlSurface() : nullptr;
 #else
-    auto *surface = window->object();
+    auto *surface = window ? window->object() : nullptr;
 #endif
+    // The surface is null before the window is shown and after it is hidden;
+    // wp_presentation.feedback takes a non-nullable argument.
+    if (!surface)
+        return;
+
     auto *feedback = new WebOSPresentationFeedbackPrivate(d->feedback(surface));
+    // Parented so feedbacks whose events never arrive (window torn down) are
+    // reclaimed with this object instead of accumulating for ever.
+    feedback->setParent(this);
 
-    if (feedback) {
-        connect(feedback, &WebOSPresentationFeedbackPrivate::syncOutput, this, &WebOSPresentationTime::feedbackSyncOutput);
-        connect(feedback, &WebOSPresentationFeedbackPrivate::presented, this, &WebOSPresentationTime::feedbackPresented);
-        connect(feedback, &WebOSPresentationFeedbackPrivate::discarded, this, &WebOSPresentationTime::feedbackDiscarded);
+    connect(feedback, &WebOSPresentationFeedbackPrivate::syncOutput, this, &WebOSPresentationTime::feedbackSyncOutput);
+    connect(feedback, &WebOSPresentationFeedbackPrivate::presented, this, &WebOSPresentationTime::feedbackPresented);
+    connect(feedback, &WebOSPresentationFeedbackPrivate::discarded, this, &WebOSPresentationTime::feedbackDiscarded);
 
-        struct timespec ts;
-        clock_gettime(uint2int(d->clock_id()), &ts);
+    struct timespec ts;
+    clock_gettime(uint2int(d->clock_id()), &ts);
 
-        mFeedbacks[feedback] = ts;
-    }
+    mFeedbacks[feedback] = ts;
 }
 
-static int
+static uint32_t
 timespec_diff_to_usec(const struct timespec *a, const struct timespec *b)
 {
-    long secs = a->tv_sec - b->tv_sec;
-    long nsec = a->tv_nsec - b->tv_nsec;
+    // 64-bit math: an int overflows after ~35 minutes of CLOCK_MONOTONIC,
+    // which is exactly what the first frame measures against a zero timespec.
+    qint64 secs = qint64(a->tv_sec) - qint64(b->tv_sec);
+    qint64 nsec = qint64(a->tv_nsec) - qint64(b->tv_nsec);
+    qint64 usec = secs * 1000000 + nsec / 1000;
 
-    return secs * 1000000 + nsec / 1000;
+    if (usec < 0)
+        return 0;
+    if (usec > qint64(std::numeric_limits<uint32_t>::max()))
+        return std::numeric_limits<uint32_t>::max();
+    return uint32_t(usec);
 }
 
 static inline void
@@ -128,8 +151,10 @@ void WebOSPresentationTime::feedbackPresented(uint32_t tv_sec_hi, uint32_t tv_se
 
         // deliverUpdateRequestToPresentation
         uint32_t d2p = timespec_diff_to_usec(&pt, &mFeedbacks[feedback]);
-        // between Presentations
-        uint32_t p2p = timespec_diff_to_usec(&pt, &prevPt);
+        // between Presentations; the first frame has no previous
+        // presentation, so report 0 instead of the time since boot
+        uint32_t p2p = (prevPt.tv_sec == 0 && prevPt.tv_nsec == 0)
+            ? 0 : timespec_diff_to_usec(&pt, &prevPt);
 
         emit presented(d2p, p2p);
 

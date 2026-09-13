@@ -20,7 +20,10 @@
 #include <QtWaylandClient/private/qwaylandscreen_p.h>
 #include <QtWaylandClient/private/qwaylandintegration_p.h>
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+#include <QtWaylandClient/private/qwaylandglcontext_p.h>
+#include <QtWaylandClient/private/qwaylandeglclientbufferintegration_p.h>
+#elif QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QtWaylandEglClientHwIntegration/private/qwaylandglcontext_p.h>
 #include <QtWaylandEglClientHwIntegration/private/qwaylandeglclientbufferintegration_p.h>
 #else
@@ -49,7 +52,11 @@ WebOSNativeInterface::nativeResourceForScreen(const QByteArray &resourceString, 
 {
     QByteArray lowerCaseResource = resourceString.toLower();
 
-    if (lowerCaseResource == "display")
+    // A placeholder QPlatformScreen (used while no real output is available
+    // yet) is not a QWaylandScreen; the cast would be invalid. Upstream
+    // guards its own screen casts the same way (nativeResourceForScreen's
+    // "output" case).
+    if (lowerCaseResource == "display" && screen->handle() && !screen->handle()->isPlaceholder())
         return static_cast<QWaylandScreen *>(screen->handle())->display()->wl_display();
 
     return QWaylandNativeInterface::nativeResourceForScreen(resourceString, screen);
