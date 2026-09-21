@@ -55,6 +55,7 @@ class WebOSInputDevice::WebOSKeyboard : public QWaylandInputDevice::Keyboard
 {
 public:
     WebOSKeyboard(QWaylandInputDevice *device);
+    ~WebOSKeyboard();
 
 #if QT_CONFIG(xkbcommon)
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)

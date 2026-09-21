@@ -16,7 +16,10 @@
 
 #include "webosappsnapshotmanager.h"
 #include "appsnapshotmanager_p.h"
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+#include <QtWaylandClient/private/qwaylandeglclientbufferintegration_p.h>
+#include <QtWaylandClient/private/qwaylandeglinclude_p.h>
+#elif QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QtWaylandEglClientHwIntegration/private/qwaylandeglclientbufferintegration_p.h>
 #include <QtWaylandEglClientHwIntegration/private/qwaylandeglinclude_p.h>
 #else

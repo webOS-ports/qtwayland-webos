@@ -17,6 +17,8 @@
 #ifndef KEYSYMHELPER_H
 #define KEYSYMHELPER_H
 
+#include <string.h>
+
 #include <xkbcommon/xkbcommon.h>
 #include <qweboskeyextension.h>
 #include <QKeyEvent>
@@ -182,26 +184,41 @@ public:
 
     void applyWaylandModifiersMap(struct wl_array *map)
     {
+        applyModifiersMap(static_cast<const char *>(map->data), map->size);
+    }
+
+    // The array holds a sequence of NUL-terminated modifier names as sent by
+    // the compositor; nothing guarantees the final byte is a NUL, so every
+    // scan has to stay within [data, data + size).
+    void applyModifiersMap(const char *data, size_t size)
+    {
         m_map.clear();
 
         int index = 0;
-        char *p = (char *)map->data;
-        while ((const char *)p < (const char *)(map->data + map->size)) {
+        const char *p = data;
+        const char *const end = data + size;
+        while (p < end) {
+            const size_t len = strnlen(p, size_t(end - p));
+            if (len == size_t(end - p)) {
+                qWarning("modifiers_map entry is not NUL-terminated, ignoring the rest");
+                break;
+            }
             Qt::KeyboardModifier qtModifier = getQtModifierByXkbName(p);
-            if (Qt::NoModifier != qtModifier)
+            // Only the first 32 entries can ever appear in the modifier bitmask.
+            if (Qt::NoModifier != qtModifier && index < 32)
                 m_map.insert(index, qtModifier);
 
             index++;
-            p += strlen(p) + 1;
+            p += len + 1;
         }
     }
 
-    Qt::KeyboardModifiers convertNativeModifiersToQt(uint32_t nativeModifiers)
+    Qt::KeyboardModifiers convertNativeModifiersToQt(uint32_t nativeModifiers) const
     {
         Qt::KeyboardModifiers qtModifiers = Qt::NoModifier;
-        for (int index : m_map.keys()) {
-            if (nativeModifiers & (1 << index))
-                qtModifiers |= m_map[index];
+        for (auto it = m_map.cbegin(); it != m_map.cend(); ++it) {
+            if (nativeModifiers & (1u << it.key()))
+                qtModifiers |= it.value();
         }
         return qtModifiers;
     }

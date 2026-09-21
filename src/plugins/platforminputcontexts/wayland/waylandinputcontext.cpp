@@ -119,7 +119,7 @@ static QTextCharFormat qtStylingFrom(uint32_t style)
     return format;
 }
 
-static int serial = 0;
+static uint32_t serial = 0;
 
 WaylandInputContext::WaylandInputContext()
     : m_focusObject(0)
@@ -145,6 +145,12 @@ WaylandInputContext::~WaylandInputContext()
 {
     cleanup();
 
+    if (m_textModelFactory) {
+        text_model_factory_destroy(m_textModelFactory);
+    }
+    if (m_seat) {
+        wl_seat_destroy(m_seat);
+    }
     if (m_registry) {
         wl_registry_destroy(m_registry);
     }
@@ -178,7 +184,10 @@ void WaylandInputContext::commit()
     QInputMethodEvent event;
     event.setCommitString(m_preEditData.preEdit);
     resetPreEditData();
-    QGuiApplication::sendEvent(m_focusObject, &event);
+    // The focus object can already be destroyed while the model is still
+    // active; focusObjectDestroyed() only nulls the pointer.
+    if (m_focusObject)
+        QGuiApplication::sendEvent(m_focusObject, &event);
     text_model_commit(m_currentTextModel);
     text_model_reset(m_currentTextModel, serial);
 }
@@ -195,7 +204,6 @@ void WaylandInputContext::update(Qt::InputMethodQueries queries)
 
     m_pendingQueries |= queries;
     if (!m_modelActivated) {
-        m_pendingQueries |= queries;
         m_isQueryPending = true;
         return;
     }
@@ -246,7 +254,7 @@ void WaylandInputContext::commitAndReset(bool keepCursorPosition)
 #ifdef WAYLAND_INPUT_CONTEXT_DEBUG
     qDebug() << __PRETTY_FUNCTION__ << inPreEdit << keepCursorPosition;
 #endif
-    if (inPreEdit && inputMethodAccepted()) {
+    if (inPreEdit && inputMethodAccepted() && m_focusObject) {
         QList<QInputMethodEvent::Attribute> attrs;
         if (keepCursorPosition) {
             // Set attribute to move the cursor back to the original position
@@ -258,8 +266,10 @@ void WaylandInputContext::commitAndReset(bool keepCursorPosition)
         QInputMethodEvent event(QString(""), attrs);
         event.setCommitString(m_preEditData.preEdit);
 
-        // Commit the preedit data
-        QGuiApplication::sendEvent(m_focusObject, &event);
+        // Commit the preedit data. The query above runs application code
+        // that may destroy the focus object, so re-check it.
+        if (m_focusObject)
+            QGuiApplication::sendEvent(m_focusObject, &event);
 
         // Reset
         resetPreEditData();
@@ -380,7 +390,11 @@ void WaylandInputContext::showInputPanel()
 #ifdef WAYLAND_INPUT_CONTEXT_DEBUG
     qDebug() << "currentTextModel" << m_currentTextModel << "accepted " << inputMethodAccepted();
 #endif
-    if (!m_seat || !inputMethodAccepted())
+    // QInputMethod::show() calls in here directly, so the factory is not
+    // guaranteed to be bound yet (non-webOS compositor, or the registry
+    // events simply have not been dispatched); creating a text model
+    // through a null proxy would crash in libwayland.
+    if (!m_seat || !m_textModelFactory || !inputMethodAccepted())
         return;
 
     if (m_isCleanupPending)
@@ -526,9 +540,11 @@ void WaylandInputContext::registryGlobalAdded(void *data,
     // For convenience...
     QByteArray interfaceName(interface);
     WaylandInputContext* that = static_cast<WaylandInputContext*>(data);
-    if (interfaceName == "text_model_factory") {
+    // Bind each global once; rebinding on a duplicate announcement would
+    // leak the proxy the text model was created against.
+    if (interfaceName == "text_model_factory" && !that->m_textModelFactory) {
         that->m_textModelFactory = static_cast<text_model_factory *>(wl_registry_bind(that->m_registry, id, &text_model_factory_interface, 1));
-    } else if (interfaceName == "wl_seat") {
+    } else if (interfaceName == "wl_seat" && !that->m_seat) {
         that->m_seat = static_cast<wl_seat*>(wl_registry_bind(that->m_registry, id, &wl_seat_interface, 1));
     }
 }
@@ -571,7 +587,11 @@ void WaylandInputContext::textModelPreEditString(void *data, struct text_model *
     that->m_preEditData.preEdit = QString(text);
     that->m_preEditData.formats << QInputMethodEvent::Attribute(QInputMethodEvent::Cursor, that->m_preEditData.preEdit.length(), 1, QVariant());
     QInputMethodEvent *event = new QInputMethodEvent(that->m_preEditData.preEdit, that->m_preEditData.formats);
-//    resetPreEditData();
+    // Styling and cursor attributes only apply to this preedit string; the
+    // compositor sends fresh ones (preedit_styling/preedit_cursor) before the
+    // next preedit_string. Without this the list grew by at least one Cursor
+    // attribute per event and re-sent stale styling ranges every update.
+    that->m_preEditData.formats.clear();
     QCoreApplication::postEvent(that->m_focusObject, event);
 }
 
@@ -583,6 +603,11 @@ void WaylandInputContext::textModelDeleteSurroundingText(void *data, struct text
     qDebug() << __PRETTY_FUNCTION__ << index << length;
 #endif
     WaylandInputContext* that = static_cast<WaylandInputContext*>(data);
+    // The focus object may be gone while the compositor still sends events
+    // for the active model; sendEvent(nullptr, ...) would crash.
+    if (!that->m_focusObject)
+        return;
+
     QList<QInputMethodEvent::Attribute> attributes;
     QInputMethodEvent *event = new QInputMethodEvent(QString(""), attributes);
 

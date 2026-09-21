@@ -18,6 +18,7 @@
 #define WEBOSFOREIGN_P_H
 
 #include <QObject>
+#include <QPointer>
 #include <QRegion>
 #include <QWindow>
 
@@ -74,7 +75,9 @@ protected:
     virtual void webos_exported_window_id_assigned(const QString &window_id, uint32_t exported_type);
 
 private:
-    QWindow* m_window = NULL;
+    // Tracked, not owned: the application can destroy the exported window at
+    // any time while this object is still alive.
+    QPointer<QWindow> m_window;
     QRegion m_originalRegion;
     QRegion m_sourceRegion;
     QRegion m_destinationRegion;

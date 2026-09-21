@@ -64,6 +64,7 @@ set (PRIVATE_HEADERS
     webosplatform_p.h
     webospresentationtime_p.h
     webosshellsurface_p.h
+    webosexposedrectparser.h
     webossurfacegroup_p.h
     webossurfacegroupcompositor_p.h
     webossurfacegrouplayer_p.h
@@ -79,6 +80,7 @@ set (SOURCES
     webosshell.cpp
     webosshellintegration.cpp
     webosshellsurface.cpp
+    webosexposedrectparser.cpp
     webossurfacegroup.cpp
     webossurfacegroupcompositor.cpp
     webossurfacegrouplayer.cpp

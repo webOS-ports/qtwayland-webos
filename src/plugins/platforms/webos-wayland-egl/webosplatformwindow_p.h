@@ -18,7 +18,14 @@
 #define WEBOSWINDOW_H
 
 #include <QtCore/qglobal.h>
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QtCore/QPointer>
+// Qt 6.10 moved the QtWayland client into qtbase and stopped publishing the
+// client EGL hardware integration as its own module; its private headers are
+// installed alongside the QtWaylandClient ones instead. The implementation
+// comes from the wayland-egl client buffer plugin, which exports these types.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+#include <QtWaylandClient/private/qwaylandeglwindow_p.h>
+#elif QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QtWaylandEglClientHwIntegration/private/qwaylandeglwindow_p.h>
 #else
 #include "qwaylandeglwindow.h"
@@ -92,7 +99,11 @@ private slots:
     void onScreenChanged(QScreen *screen);
 
 private:
-    WebOSShellSurface *m_shellSurface = nullptr;
+    // resetSurfaceRole() (QWindow::setFlags/setParent toggling a role) can
+    // delete the underlying WebOSShellSurfacePrivate - and with it the
+    // public WebOSShellSurface - out from under this window without any
+    // notification here, so a raw pointer would dangle.
+    QPointer<WebOSShellSurface> m_shellSurface;
 
     bool m_autoOrientation;
     QRect m_initialGeometry;

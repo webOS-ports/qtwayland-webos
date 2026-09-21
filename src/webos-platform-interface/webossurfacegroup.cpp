@@ -33,7 +33,10 @@ WebOSSurfaceGroupPrivate::WebOSSurfaceGroupPrivate()
 
 WebOSSurfaceGroupPrivate::~WebOSSurfaceGroupPrivate()
 {
-    wl_webos_surface_group_destroy(object());
+    // object() is null when creating the group failed or init() never ran;
+    // wl_webos_surface_group_destroy() does not tolerate a null proxy.
+    if (object())
+        wl_webos_surface_group_destroy(object());
 }
 
 void WebOSSurfaceGroupPrivate::setAllowAnonymousLayers(bool allow)
@@ -41,13 +44,26 @@ void WebOSSurfaceGroupPrivate::setAllowAnonymousLayers(bool allow)
     allow_anonymous_layers(allow);
 }
 
-void WebOSSurfaceGroupPrivate::attachAnonymousSurface(QWaylandWindow* surface, WebOSSurfaceGroup::ZHint hint)
+// A QWaylandWindow's wl_surface is null before the window is shown and after
+// it is hidden; marshalling a null non-nullable argument makes libwayland
+// abort the process, so every attach/detach has to check it first.
+static inline struct ::wl_surface *surfaceOf(QWaylandWindow* window)
 {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    attach_anonymous(surface->wlSurface(), (uint32_t)hint);
+    return window ? window->wlSurface() : nullptr;
 #else
-    attach_anonymous(surface->object(), (uint32_t)hint);
+    return window ? window->object() : nullptr;
 #endif
+}
+
+void WebOSSurfaceGroupPrivate::attachAnonymousSurface(QWaylandWindow* surface, WebOSSurfaceGroup::ZHint hint)
+{
+    struct ::wl_surface *ws = surfaceOf(surface);
+    if (!ws) {
+        qWarning("attachAnonymousSurface: window has no wl_surface");
+        return;
+    }
+    attach_anonymous(ws, (uint32_t)hint);
 }
 
 WebOSSurfaceGroupLayer* WebOSSurfaceGroupPrivate::createLayer(const QString& name, int z)
@@ -66,34 +82,33 @@ void WebOSSurfaceGroupPrivate::webos_surface_group_owner_destroyed()
     Q_Q(WebOSSurfaceGroup);
     emit q->ownerDestroyed();
 
-    while (m_attachedSurfaces.length() > 0) {
-        const QPointer<QWaylandWindow>& item = m_attachedSurfaces.front();
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-        detach(item->wlSurface());
-#else
-        detach(item->object());
-#endif
-        m_attachedSurfaces.pop_front();
+    while (!m_attachedSurfaces.isEmpty()) {
+        // The QPointer is null when the window was destroyed without
+        // detachSurface(), and even a live window may have lost its
+        // wl_surface by now - both would crash in detach().
+        QPointer<QWaylandWindow> item = m_attachedSurfaces.takeFirst();
+        struct ::wl_surface *ws = surfaceOf(item.data());
+        if (ws)
+            detach(ws);
     }
 }
 
 void WebOSSurfaceGroupPrivate::attachSurface(QWaylandWindow* surface, const QString& layer)
 {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    attach(surface->wlSurface(), layer);
-#else
-    attach(surface->object(), layer);
-#endif
+    struct ::wl_surface *ws = surfaceOf(surface);
+    if (!ws) {
+        qWarning("attachSurface: window has no wl_surface");
+        return;
+    }
+    attach(ws, layer);
     m_attachedSurfaces << surface;
 }
 
 void WebOSSurfaceGroupPrivate::detachSurface(QWaylandWindow* surface)
 {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    detach(surface->wlSurface());
-#else
-    detach(surface->object());
-#endif
+    struct ::wl_surface *ws = surfaceOf(surface);
+    if (ws)
+        detach(ws);
     m_attachedSurfaces.removeAll(surface);
 }
 

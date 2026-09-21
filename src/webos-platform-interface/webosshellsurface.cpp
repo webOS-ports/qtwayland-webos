@@ -16,6 +16,7 @@
 
 #include "webosshellsurface.h"
 #include "webosshellsurface_p.h"
+#include "webosexposedrectparser.h"
 
 #include <QtWaylandClient/private/qwaylandwindow_p.h>
 
@@ -27,6 +28,7 @@
 const struct wl_webos_shell_surface_listener WebOSShellSurfacePrivate::listener = {
     WebOSShellSurfacePrivate::state_changed,
     WebOSShellSurfacePrivate::position_changed,
+    WebOSShellSurfacePrivate::client_size_changed,
     WebOSShellSurfacePrivate::close,
     WebOSShellSurfacePrivate::exposed,
     WebOSShellSurfacePrivate::state_about_to_change,
@@ -136,23 +138,21 @@ void WebOSShellSurfacePrivate::position_changed(void *data, struct wl_webos_shel
     shell->positionChanged();
 }
 
+void WebOSShellSurfacePrivate::client_size_changed(void *data, struct wl_webos_shell_surface *wl_webos_shell_surface, int32_t width, int32_t height)
+{
+    Q_UNUSED(wl_webos_shell_surface);
+    qDebug() << __PRETTY_FUNCTION__;
+    WebOSShellSurfacePrivate* shell = static_cast<WebOSShellSurfacePrivate*>(data);
+    shell->m_parent->resizeFromApplyConfigure(QSize(width,height));
+}
+
 
 void WebOSShellSurfacePrivate::exposed(void *data, struct wl_webos_shell_surface *wl_webos_shell_surface, struct wl_array *rectangles)
 {
     Q_UNUSED(wl_webos_shell_surface);
     WebOSShellSurfacePrivate* shell = static_cast<WebOSShellSurfacePrivate*>(data);
-    int32_t* pos;
 
-    QVector<QRect> rects;
-    for (pos = (int32_t*)rectangles->data; pos < (int32_t*)rectangles->data + rectangles->size && *pos != -1; ) {
-        if (pos + 4 < (int32_t*)rectangles->data + rectangles->size) {
-            QRect r(*(pos + 0), *(pos + 1), *(pos + 2), *(pos + 3));
-            rects << r;
-        } else {
-            qWarning() << "missing data from expose rects";
-        }
-        pos += 4;
-    }
+    QVector<QRect> rects = parseWebOSExposedRects(rectangles->data, rectangles->size);
 
     QRegion exposeRegion;
     exposeRegion.setRects(rects.data(), rects.size());
@@ -162,7 +162,8 @@ void WebOSShellSurfacePrivate::exposed(void *data, struct wl_webos_shell_surface
 void WebOSShellSurfacePrivate::positionChanged()
 {
     Q_Q(WebOSShellSurface);
-    q->emitPositionChanged();
+    if (q)
+        q->emitPositionChanged();
 }
 
 void WebOSShellSurfacePrivate::state_about_to_change(void *data, struct wl_webos_shell_surface *wl_webos_shell_surface, uint32_t state)
@@ -176,7 +177,8 @@ void WebOSShellSurfacePrivate::state_about_to_change(void *data, struct wl_webos
 void WebOSShellSurfacePrivate::stateAboutToChange(Qt::WindowState state)
 {
     Q_Q(WebOSShellSurface);
-    q->emitStateAboutToChange(state);
+    if (q)
+        q->emitStateAboutToChange(state);
 }
 
 void WebOSShellSurfacePrivate::addon_status_changed(void *data, struct wl_webos_shell_surface *wl_webos_shell_surface, uint32_t addon_status)
@@ -190,7 +192,8 @@ void WebOSShellSurfacePrivate::addon_status_changed(void *data, struct wl_webos_
 void WebOSShellSurfacePrivate::addonStatusChanged(WebOSShellSurface::AddonStatus status)
 {
     Q_Q(WebOSShellSurface);
-    q->emitAddonStatusChanged(status);
+    if (q)
+        q->emitAddonStatusChanged(status);
 }
 
 #if (QT_VERSION < QT_VERSION_CHECK(5,10,0))
@@ -288,6 +291,18 @@ void WebOSShellSurfacePrivate::setInputRegion(const QRegion& region)
     if (!wliface)
         return;
     wl_compositor *wlcompositor = static_cast<wl_compositor *>(wliface->nativeResourceForIntegration("compositor"));
+    if (!wlcompositor)
+        return;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    wl_surface *wlsurface = m_parent->wlSurface();
+#else
+    wl_surface *wlsurface = static_cast<QtWayland::wl_surface *>(m_parent)->object();
+#endif
+    // Null after the window is hidden; set_input_region would abort in
+    // libwayland on a null non-nullable argument.
+    if (!wlsurface)
+        return;
+
     wl_region *wlregion = wl_compositor_create_region(wlcompositor);
     qreal dpr = m_parent->window()->devicePixelRatio();
 
@@ -296,11 +311,6 @@ void WebOSShellSurfacePrivate::setInputRegion(const QRegion& region)
                       rect.width()*dpr, rect.height()*dpr);
     }
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    wl_surface *wlsurface = m_parent->wlSurface();
-#else
-    wl_surface *wlsurface = static_cast<QtWayland::wl_surface *>(m_parent)->object();
-#endif
     wl_surface_set_input_region(wlsurface, wlregion);
     wl_surface_commit(wlsurface);
     wl_region_destroy(wlregion);
@@ -340,6 +350,13 @@ WebOSShellSurface::WebOSShellSurface(wl_webos_shell_surface* shellSurface, struc
 
 WebOSShellSurface::~WebOSShellSurface()
 {
+    // The private side (owned by QWaylandWindow) normally deletes this
+    // object. If an application deletes the pointer it got from
+    // shellSurfaceFor() instead, the private would keep emitting through a
+    // dangling q_ptr on the next compositor event - so unlink it here.
+    Q_D(WebOSShellSurface);
+    if (d)
+        d->q_ptr = nullptr;
 }
 
 QPointF WebOSShellSurface::position()
