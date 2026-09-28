@@ -50,6 +50,18 @@ const struct text_model_listener WaylandInputContext::textModelListener = {
     WaylandInputContext::textModelInputPanelRect
 };
 
+/*
+ * webOS reserves this bit of the content hint for Qt::ImhNoOnScreenKeyboard.
+ *
+ * text.xml stops at MULTILINE (0x200) and this is the next bit up. It is
+ * deliberately not in the enum: the hint crosses the wire as a plain uint and
+ * the compositor relays set_content_type to content_type without inspecting
+ * it, so a bit past the end of the enum arrives at the input method untouched
+ * and costs no protocol change. maliit-framework-webos reads it in
+ * MInputContextWestonIMProtocolConnection; keep the two in step.
+ */
+static const uint32_t TEXT_MODEL_CONTENT_HINT_NO_INPUT_PANEL = 0x400;
+
 static uint32_t contentHintFromQtHints(Qt::InputMethodHints hints)
 {
     // Qt assumes that these are always desired. They will be masked out below
@@ -63,6 +75,20 @@ static uint32_t contentHintFromQtHints(Qt::InputMethodHints hints)
     if (hints & Qt::ImhPreferLowercase) { wlHint |= TEXT_MODEL_CONTENT_HINT_LOWERCASE; }
     if (hints & Qt::ImhNoPredictiveText) { wlHint &= ~TEXT_MODEL_CONTENT_HINT_AUTO_COMPLETION; }
     if (hints & Qt::ImhPreferLatin) { wlHint |= TEXT_MODEL_CONTENT_HINT_LATIN; }
+
+    /*
+     * The one hint this context could not honour on its own.
+     *
+     * Qt's convention is that a platform input context does not raise the
+     * panel for a field carrying this, and the check usually lives right here
+     * -- but here showing the panel and activating the text model are the same
+     * call, and declining to activate would leave the input method knowing
+     * nothing about the field: no content type, and no key redirection from a
+     * physical keyboard. A dialer with its own keypad wants all of that and
+     * none of the keys. So the refusal is passed on instead, and the input
+     * method, which is the thing that actually draws the panel, decides.
+     */
+    if (hints & Qt::ImhNoOnScreenKeyboard) { wlHint |= TEXT_MODEL_CONTENT_HINT_NO_INPUT_PANEL; }
 
     return wlHint;
 }
