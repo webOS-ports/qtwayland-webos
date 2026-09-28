@@ -50,8 +50,24 @@ const struct text_model_listener WaylandInputContext::textModelListener = {
     WaylandInputContext::textModelInputPanelRect
 };
 
+/*!
+ * \brief "This field has a keypad of its own; do not draw one over it."
+ *
+ * Qt has no hint for this. Its enum stops at ImhNoTextHandles (0x1000) and the
+ * next three bits are free before ImhExclusiveInputMask claims the top half, so
+ * webOS takes the last of them: the furthest from whatever Qt allocates next,
+ * and outside the exclusive mask so it can never be mistaken for an input
+ * filter. QFlags keeps a bit it does not recognise and nothing between the
+ * field and here inspects one, so it arrives intact.
+ *
+ * A dialer and a PIN pad both want everything the input method offers -- the
+ * content type, and the key redirection that gives a phone QWERTY's letter keys
+ * the digits printed on them -- and none of its keys.
+ */
+static const uint32_t WebOSImhNoOnScreenKeyboard = 0x8000;
+
 /*
- * webOS reserves this bit of the content hint for Qt::ImhNoOnScreenKeyboard.
+ * The same refusal on the wire, for the trip to the input method.
  *
  * text.xml stops at MULTILINE (0x200) and this is the next bit up. It is
  * deliberately not in the enum: the hint crosses the wire as a plain uint and
@@ -77,18 +93,19 @@ static uint32_t contentHintFromQtHints(Qt::InputMethodHints hints)
     if (hints & Qt::ImhPreferLatin) { wlHint |= TEXT_MODEL_CONTENT_HINT_LATIN; }
 
     /*
-     * The one hint this context could not honour on its own.
+     * The one refusal this context cannot honour on its own.
      *
-     * Qt's convention is that a platform input context does not raise the
-     * panel for a field carrying this, and the check usually lives right here
-     * -- but here showing the panel and activating the text model are the same
-     * call, and declining to activate would leave the input method knowing
-     * nothing about the field: no content type, and no key redirection from a
-     * physical keyboard. A dialer with its own keypad wants all of that and
-     * none of the keys. So the refusal is passed on instead, and the input
-     * method, which is the thing that actually draws the panel, decides.
+     * Where a platform input context raises the panel itself, this is where it
+     * would decline to. Here showing the panel and activating the text model
+     * are the same call -- setFocusObject() calls showInputPanel(), which
+     * creates the model and activates it -- so declining to show is declining
+     * to activate, and an inactive field is one the input method knows nothing
+     * about: no content type, and no key redirection from a physical keyboard.
+     * So the refusal is passed on instead, and the input method, which is the
+     * thing that actually draws the panel and can leave it down while still
+     * taking the keys, decides.
      */
-    if (hints & Qt::ImhNoOnScreenKeyboard) { wlHint |= TEXT_MODEL_CONTENT_HINT_NO_INPUT_PANEL; }
+    if (hints & WebOSImhNoOnScreenKeyboard) { wlHint |= TEXT_MODEL_CONTENT_HINT_NO_INPUT_PANEL; }
 
     return wlHint;
 }
