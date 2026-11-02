@@ -463,6 +463,15 @@ void WaylandInputContext::showInputPanel()
 
             text_model_activate(m_currentTextModel, serial++, m_seat, surface);
             m_isActivationPending = true;
+
+            // The input method puts its panel up on activation, and update()
+            // sends nothing until the compositor has answered. A field that
+            // refuses the panel has to say so now, or the panel flashes up
+            // until it does.
+            QInputMethodQueryEvent query(Qt::ImHints);
+            QCoreApplication::sendEvent(m_focusObject, &query);
+            Qt::InputMethodHints hints = Qt::InputMethodHints(query.value(Qt::ImHints).toUInt());
+            text_model_set_content_type(m_currentTextModel, contentHintFromQtHints(hints), contentPurposeFromQtHints(hints));
         } else {
             qWarning() << "Text model activation has been requested already.";
             updateInputPanelRect(m_focusObject, WebOSInputPanelLocator::instance()->inputPanelRect(m_focusObject));
