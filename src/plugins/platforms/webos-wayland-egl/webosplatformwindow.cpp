@@ -134,6 +134,41 @@ void WebOSPlatformWindow::setVisible(bool visible)
     } else if (visible) {
         mDisplay->flushRequests();
         setGeometry(window()->geometry());
+        // QWaylandWindow::setVisible() would start the window again through
+        // initWindow(), which first drops any frame callback still pending
+        // (resetFrameCallback(), private). Do the same here. A callback pending
+        // from the last frame before the hide may never come: the compositor
+        // sends it when it presents the surface, and a hidden surface is not
+        // presented. Once the timeout check gives up on it,
+        // mFrameCallbackTimedOut keeps the window unexposed, so it never commits
+        // the frame that would bring the callback, and stays blank for good.
+        // Dropping a callback that would still have arrived is deliberate: the
+        // first frame after the show then commits without waiting for it. The
+        // compositor's late done event for it is dropped with the proxy.
+        {
+            QMutexLocker lock(&mFrameSyncMutex);
+            if (mFrameCallback) {
+                wl_callback_destroy(mFrameCallback);
+                mFrameCallback = nullptr;
+            }
+            mFrameCallbackElapsedTimer.invalidate();
+            mFrameSyncWait.wakeAll();
+        }
+        if (mFrameCallbackCheckIntervalTimerId != -1) {
+            killTimer(mFrameCallbackCheckIntervalTimerId);
+            mFrameCallbackCheckIntervalTimerId = -1;
+        }
+        // Only the timed-out case is the one that used to leave the window
+        // blank; a callback merely pending at show is routine (the keyboard
+        // shows and hides all the time), so that one is not logged.
+        if (mFrameCallbackTimedOut)
+            qWarning() << "WebOSPlatformWindow: frame callback had timed out; reset on show of"
+                       << window();
+        mFrameCallbackTimedOut = false;
+        // QWaylandWindow::setVisible() is skipped here, so recompute the exposure
+        // it caches. A frame callback that arrived while the window was hidden
+        // left it unexposed, and an unexposed window never draws to clear it.
+        updateExposure();
     } else {
         sendExposeEvent(QRect());
         // In webOS, hide the window from the compositor by attaching a null buffer
