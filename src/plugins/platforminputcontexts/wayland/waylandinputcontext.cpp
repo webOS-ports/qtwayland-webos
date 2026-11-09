@@ -280,8 +280,43 @@ void WaylandInputContext::update(Qt::InputMethodQueries queries)
         updateSurroundingText(query.value(Qt::ImSurroundingText), query.value(Qt::ImCursorPosition), query.value(Qt::ImAnchorPosition));
     }
 
+    if (queries & Qt::ImCursorRectangle)
+        updateCursorRectangle();
+
     m_pendingQueries = Qt::ImEnabled;
     m_isQueryPending = false;
+}
+
+/*
+ * Tells the compositor where the caret is, in the window's coordinates, which
+ * are the surface's. It is what lets the shell tell a press on the field being
+ * typed into from a press anywhere else in the application: its Cut/Copy/Paste
+ * pill is only for the former. The protocol always had the request; nothing
+ * sent it.
+ *
+ * QInputMethod::cursorRectangle() is the focus object's own ImCursorRectangle
+ * taken through the input item transform, so it is in window coordinates
+ * whatever the item is nested in. A caret with no height is a focus object that
+ * did not answer, not a caret, and is not sent.
+ */
+void WaylandInputContext::updateCursorRectangle()
+{
+    if (!m_currentTextModel || !m_focusObject)
+        return;
+
+    const QRect rect = QGuiApplication::inputMethod()->cursorRectangle().toAlignedRect();
+    if (rect.height() <= 0 || rect.width() < 0)
+        return;
+
+    if (m_cursorRectangleSentValid && rect == m_cursorRectangleSent)
+        return;
+
+    text_model_set_cursor_rectangle(m_currentTextModel, rect.x(), rect.y(), rect.width(), rect.height());
+    m_cursorRectangleSent = rect;
+    m_cursorRectangleSentValid = true;
+#ifdef WAYLAND_INPUT_CONTEXT_DEBUG
+    qDebug() << "cursorRectangle" << rect;
+#endif
 }
 
 void WaylandInputContext::resetPreEditData()
@@ -480,7 +515,7 @@ void WaylandInputContext::showInputPanel()
         updateInputPanelRect(m_focusObject, WebOSInputPanelLocator::instance()->inputPanelRect(m_focusObject));
 
         // This will execute pending queries also.
-        update(Qt::ImHints | Qt::ImSurroundingText | Qt::ImAnchorPosition | Qt::ImCursorPosition | Qt::ImEnterKeyType | Qt::ImMaximumTextLength | Qt::ImPlatformData);
+        update(Qt::ImHints | Qt::ImSurroundingText | Qt::ImAnchorPosition | Qt::ImCursorPosition | Qt::ImCursorRectangle | Qt::ImEnterKeyType | Qt::ImMaximumTextLength | Qt::ImPlatformData);
     }
 }
 
@@ -790,12 +825,14 @@ void WaylandInputContext::textModelEnter(void *data, struct text_model *text_mod
     WaylandInputContext* that = static_cast<WaylandInputContext*>(data);
     that->m_modelActivated = true;
     that->m_isActivationPending = false;
+    // A text model just entered has heard no caret yet, whatever the last did.
+    that->m_cursorRectangleSentValid = false;
 
     that->m_inputPanelState = InputPanelShowing;
     that->emitInputPanelVisibleChanged();
 
     // This will execute pending queries also.
-    that->update(Qt::ImHints | Qt::ImSurroundingText | Qt::ImAnchorPosition | Qt::ImCursorPosition | Qt::ImEnterKeyType | Qt::ImMaximumTextLength | Qt::ImPlatformData);
+    that->update(Qt::ImHints | Qt::ImSurroundingText | Qt::ImAnchorPosition | Qt::ImCursorPosition | Qt::ImCursorRectangle | Qt::ImEnterKeyType | Qt::ImMaximumTextLength | Qt::ImPlatformData);
 
     Q_UNUSED(text_model);
     Q_UNUSED(surface);
@@ -850,4 +887,5 @@ void WaylandInputContext::cleanup()
     m_isActivationPending = false;
     m_modelActivated = false;
     m_inputPanelRectRequested.setRect(0, 0, 0, 0);
+    m_cursorRectangleSentValid = false;
 }

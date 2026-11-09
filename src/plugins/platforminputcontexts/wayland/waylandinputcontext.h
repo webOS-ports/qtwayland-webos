@@ -106,6 +106,7 @@ private:
 
     void ensureWaylandConnection();
     void updateSurroundingText(const QVariant& text, const QVariant& cursor, const QVariant& anchor);
+    void updateCursorRectangle();
     void resetPreEditData();
     void commitAndReset(bool keepCursorPosition = false);
 
@@ -127,6 +128,10 @@ private:
     XkbQtModifiersMap m_modifiersMap;
     QRectF m_keyboardRect;
     QRect m_inputPanelRectRequested;
+    //! The caret last sent to the compositor; unset after cleanup so a new text
+    //! model hears it again.
+    QRect m_cursorRectangleSent;
+    bool m_cursorRectangleSentValid = false;
 
     InputPanelState m_inputPanelState;
 };
