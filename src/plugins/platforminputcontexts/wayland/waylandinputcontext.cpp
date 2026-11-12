@@ -23,6 +23,7 @@
 #include <QTextCharFormat>
 #include <QInputMethodEvent>
 #include "keysymhelper.h"
+#include "contentpurpose.h"
 
 #include <QDebug>
 #include <QRectF>
@@ -108,26 +109,6 @@ static uint32_t contentHintFromQtHints(Qt::InputMethodHints hints)
     if (hints & WebOSImhNoOnScreenKeyboard) { wlHint |= TEXT_MODEL_CONTENT_HINT_NO_INPUT_PANEL; }
 
     return wlHint;
-}
-
-static uint32_t contentPurposeFromQtHints(Qt::InputMethodHints hints)
-{
-    Qt::InputMethodHints exclusiveHints = hints & Qt::ImhExclusiveInputMask;
-    uint32_t wlPurpose = 0;
-    switch (exclusiveHints) {
-        case Qt::ImhDigitsOnly: wlPurpose |= TEXT_MODEL_CONTENT_PURPOSE_DIGITS; break;
-        case Qt::ImhFormattedNumbersOnly: wlPurpose |= TEXT_MODEL_CONTENT_PURPOSE_NUMBER; break;
-        case Qt::ImhDialableCharactersOnly: wlPurpose |= TEXT_MODEL_CONTENT_PURPOSE_PHONE; break;
-        case Qt::ImhEmailCharactersOnly: wlPurpose |= TEXT_MODEL_CONTENT_PURPOSE_EMAIL; break;
-        case Qt::ImhUrlCharactersOnly: wlPurpose |= TEXT_MODEL_CONTENT_PURPOSE_URL; break;
-    }
-
-    if (hints & Qt::ImhPreferNumbers) { wlPurpose |= TEXT_MODEL_CONTENT_PURPOSE_NUMBER; }
-    if (hints & Qt::ImhDate) { wlPurpose |= TEXT_MODEL_CONTENT_PURPOSE_DATE; }
-    if (hints & Qt::ImhTime) { wlPurpose |= TEXT_MODEL_CONTENT_PURPOSE_TIME; }
-    if (hints & Qt::ImhHiddenText) { wlPurpose |= TEXT_MODEL_CONTENT_PURPOSE_PASSWORD; }
-
-    return wlPurpose;
 }
 
 static uint32_t enterKeyTypeFromQtEnterKeyTypes(Qt::EnterKeyType enterType)

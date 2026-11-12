@@ -31,6 +31,7 @@ SOURCES = \
     waylandinputcontext.cpp
 
 HEADERS = \
+    contentpurpose.h \
     keysymhelper.h \
     waylandinputcontext.h
 
