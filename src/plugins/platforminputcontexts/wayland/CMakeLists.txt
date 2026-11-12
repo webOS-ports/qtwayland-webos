@@ -27,6 +27,7 @@ qt_internal_add_plugin(WaylandPlatformInputContextPlugin
     OUTPUT_NAME waylandplatforminputcontextplugin
     PLUGIN_TYPE platforminputcontexts
     SOURCES
+        contentpurpose.h
         keysymhelper.h
         main.cpp
         waylandinputcontext.cpp waylandinputcontext.h
